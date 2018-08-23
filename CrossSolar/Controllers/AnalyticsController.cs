@@ -14,12 +14,14 @@ namespace CrossSolar.Controllers
     public class AnalyticsController : Controller
     {
         private readonly IAnalyticsRepository _analyticsRepository;
+        private readonly IDayAnalyticsRepository _dayAnalyticsRepository;
 
         private readonly IPanelRepository _panelRepository;
 
-        public AnalyticsController(IAnalyticsRepository analyticsRepository, IPanelRepository panelRepository)
+        public AnalyticsController(IAnalyticsRepository analyticsRepository, IDayAnalyticsRepository dayAnalyticsRepository, IPanelRepository panelRepository)
         {
             _analyticsRepository = analyticsRepository;
+            _dayAnalyticsRepository = dayAnalyticsRepository;
             _panelRepository = panelRepository;
         }
 
@@ -34,6 +36,8 @@ namespace CrossSolar.Controllers
 
             var analytics = await _analyticsRepository.Query()
                 .Where(x => x.PanelId.Equals(panelId, StringComparison.CurrentCultureIgnoreCase)).ToListAsync();
+
+            if (!analytics.Any()) return NotFound();
 
             var result = new OneHourElectricityListModel
             {
@@ -54,6 +58,35 @@ namespace CrossSolar.Controllers
         {
             var result = new List<OneDayElectricityModel>();
 
+            var panel = await _panelRepository.Query()
+                     .FirstOrDefaultAsync(x => x.Serial.Equals(panelId, StringComparison.CurrentCultureIgnoreCase));
+
+            if (panel == null) return NotFound();
+
+            var analytics = await _analyticsRepository.Query()
+                .Where(x => x.PanelId.Equals(panelId, StringComparison.CurrentCultureIgnoreCase)).ToListAsync();
+
+            // Talvez seja o bug.
+            if (!analytics.Any()) return NotFound();
+
+            var limitedDate = DateTime.UtcNow.Date;
+            result = analytics.AsEnumerable()
+                .GroupBy(row => row.DateTime.Date.AddHours(row.DateTime.Hour))
+                .Select(grp => new OneDayElectricityModel
+                {
+                    DateTime = grp.Key,
+                    Count = grp.Count(),
+                    Sum = grp.Sum(x => x.KiloWatt),
+                    Maximum = grp.Max(x => x.KiloWatt),
+                    Minimum = grp.Min(x => x.KiloWatt),
+                    Average = grp.Average(x => x.KiloWatt)
+                }).Where(x => x.DateTime < limitedDate).ToList();
+
+            //foreach (var report in result)
+            //{
+            //    var line = string.Format("Date:{0}. Count{1}. Sum:{2}. Max:{3}. Min:{4}. Average:{5}.", report.DateTime, report.Count, report.Sum, report.Maximum, report.Minimum, report.Average);
+            //}
+
             return Ok(result);
         }
 
@@ -61,7 +94,7 @@ namespace CrossSolar.Controllers
         [HttpPost("{panelId}/[controller]")]
         public async Task<IActionResult> Post([FromRoute] string panelId, [FromBody] OneHourElectricityModel value)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (value == null) return BadRequest();
 
             var oneHourElectricityContent = new OneHourElectricity
             {

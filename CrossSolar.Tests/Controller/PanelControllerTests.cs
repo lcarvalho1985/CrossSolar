@@ -1,5 +1,8 @@
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using CrossSolar.Controllers;
+using CrossSolar.Domain;
 using CrossSolar.Models;
 using CrossSolar.Repository;
 using Microsoft.AspNetCore.Mvc;
@@ -42,5 +45,6 @@ namespace CrossSolar.Tests.Controller
             Assert.NotNull(createdResult);
             Assert.Equal(201, createdResult.StatusCode);
         }
+
     }
 }
